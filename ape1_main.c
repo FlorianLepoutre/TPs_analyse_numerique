@@ -1,5 +1,8 @@
+#define _POSIX_C_SOURCE 199309L
 #include <stdio.h>
 #include <stdlib.h>
+#include <cblas.h>
+#include <time.h>
 
 typedef struct {
     double **a;
@@ -88,25 +91,62 @@ int main(void){
     double **a = A->a;
     for (int i=0;i<1000;i++){
         for (int j=0;j<2000;j++){
-            a[i][j] = drand48();
+            a[i][j] = (double) rand() / RAND_MAX;;
         }
     }
 
     double **b = B->a;
     for (int i=0;i<2000;i++){
         for (int j=0;j<3000;j++){
-            b[i][j] = drand48();
+            b[i][j] = (double) rand() / RAND_MAX;;
         }
     }
 
+    struct timespec t1, t2;
+
+    clock_gettime(CLOCK_MONOTONIC, &t1);
     int result = mult_matrix(A,B,C);
+    clock_gettime(CLOCK_MONOTONIC, &t2);
+
+    double t_naif = (t2.tv_sec - t1.tv_sec) + 1e-9 * (t2.tv_nsec - t1.tv_nsec);
+    printf("Temps naive : %.6f s\n", t_naif);
+
     if (result == -1) {
         return -1;
     }
 
+    free_matrix(C);
+    C = allocate_matrix(1000,3000);
+    if (C == NULL) return -1;
+
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    cblas_dgemm(
+        CblasRowMajor,
+        CblasNoTrans,
+        CblasNoTrans,
+        A->m,        // M
+        B->n,        // N
+        A->n,        // K
+        1.0,         // alpha
+        A->data,     // A
+        A->n,        // lda
+        B->data,     // B
+        B->n,        // ldb
+        0.0,         // beta
+        C->data,     // C
+        C->n         // ldc
+    );
+    clock_gettime(CLOCK_MONOTONIC, &t2);
+
+    double t_blas = (t2.tv_sec - t1.tv_sec) + 1e-9 * (t2.tv_nsec - t1.tv_nsec);
+    printf("Temps BLAS  : %.6f s\n", t_blas);
+
+    printf("Speedup : x%.1f\n", t_naif / t_blas);
+
     free_matrix(A);
     free_matrix(B);
     free_matrix(C);
+
     A = NULL;
     B = NULL;
     C = NULL;
